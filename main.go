@@ -90,6 +90,13 @@ func nextTrack(s *discordgo.Session, m *discordgo.MessageCreate) {
 		direction = "prev"
 		stop <- false
 	}
+
+	if args[1] == "stop" {
+		direction = "stop"
+		stop <- false
+	}
+
+	s.ChannelMessageDelete(m.ChannelID, m.ID)
 }
 
 func playAll(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -113,7 +120,7 @@ func playAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			return
 		}
-
+		s.ChannelMessageDelete(m.ChannelID, m.ID)
 		channelID := ""
 		for _, vs := range guild.VoiceStates {
 			if vs.UserID == m.Author.ID {
@@ -132,11 +139,25 @@ func playAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		for _, f := range files {
+		for i := 0; i < len(files); i++ {
+			f := files[i]
 			fmt.Println("Play:", f.Name())
-			dgvoice.PlayAudioFile(vc, fmt.Sprintf("%s/%s", Folder, f.Name()), make(chan bool))
-		}
+			dgvoice.PlayAudioFile(vc, fmt.Sprintf("%s/%s", Folder, f.Name()), stop)
 
+			if direction == "prev" {
+				i = int(math.Min(float64(-1), float64(i-2)))
+				direction = ""
+			}
+
+			if direction == "stop" {
+				direction = ""
+				vc.Close()
+				vc.Disconnect()
+				return
+			}
+			direction = ""
+		}
+		direction = ""
 		vc.Close()
 		vc.Disconnect()
 	}
@@ -180,11 +201,12 @@ func playURL(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			return
 		}
-
+		s.ChannelMessageDelete(m.ChannelID, m.ID)
 		for _, f := range files {
 			if f.Name() == video.ID+".mp4" {
 				fmt.Println("PlayAudioFile:", f.Name())
-				dgvoice.PlayAudioFile(vc, fmt.Sprintf("%s/%s", Folder, f.Name()), make(chan bool))
+				dgvoice.PlayAudioFile(vc, fmt.Sprintf("%s/%s", Folder, f.Name()), stop)
+				direction = ""
 				vc.Close()
 				vc.Disconnect()
 				return
@@ -208,8 +230,8 @@ func playURL(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		fmt.Println("PlayAudioFile:", file.Name())
-		dgvoice.PlayAudioFile(vc, file.Name(), make(chan bool))
-
+		dgvoice.PlayAudioFile(vc, file.Name(), stop)
+		direction = ""
 		vc.Close()
 		vc.Disconnect()
 	}
@@ -257,6 +279,8 @@ func playPlaylist(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
+		s.ChannelMessageDelete(m.ChannelID, m.ID)
+
 		for i := 0; i < len(playlist.Videos); i++ {
 			v := playlist.Videos[i]
 			video, err := client.VideoFromPlaylistEntry(v)
@@ -271,13 +295,21 @@ func playPlaylist(s *discordgo.Session, m *discordgo.MessageCreate) {
 					dgvoice.PlayAudioFile(vc, fmt.Sprintf("%s/%s", Folder, f.Name()), stop)
 					b = true
 					if direction == "prev" {
-						i = int(math.Min(float64(-1), float64(i-2)))
+						i = int(math.Max(float64(-1), float64(i-2)))
 						direction = ""
 					}
+
+					if direction == "stop" {
+						direction = ""
+						vc.Close()
+						vc.Disconnect()
+						return
+					}
+					direction = ""
 					break
 				}
 			}
-
+			direction = ""
 			if b {
 				continue
 			}
@@ -298,6 +330,7 @@ func playPlaylist(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 
 			fmt.Println("PlayAudioFile:", file.Name())
+
 			dgvoice.PlayAudioFile(vc, file.Name(), stop)
 
 			if direction == "prev" {
@@ -305,8 +338,17 @@ func playPlaylist(s *discordgo.Session, m *discordgo.MessageCreate) {
 				direction = ""
 			}
 
-		}
+			if direction == "stop" {
+				direction = ""
+				vc.Close()
+				vc.Disconnect()
+				return
+			}
 
+			direction = ""
+
+		}
+		direction = ""
 		vc.Close()
 		vc.Disconnect()
 
